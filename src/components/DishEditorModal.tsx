@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dish, StudioSettings, PhotoHistoryItem } from '../types';
-import { X, Wand2, Download, Sparkles, Loader2, History, Check, ArrowRight, RefreshCw, ZoomIn, SlidersHorizontal } from 'lucide-react';
+import { X, Wand2, Download, Sparkles, Loader2, History, Check, ArrowRight, RefreshCw, ZoomIn, SlidersHorizontal, BookMarked, Plus, Trash2, Tag, ChevronDown, ChevronUp } from 'lucide-react';
 
 interface DishEditorModalProps {
   dish: Dish | null;
@@ -8,6 +8,26 @@ interface DishEditorModalProps {
   onClose: () => void;
   onUpdateDishPhoto: (dishId: string, newImageUrl: string, editPrompt?: string) => void;
 }
+
+interface PromptSnippet {
+  id: string;
+  category: string;
+  text: string;
+  isCustom?: boolean;
+}
+
+const DEFAULT_SNIPPETS: PromptSnippet[] = [
+  { id: '1', category: 'Lighting & Mood', text: 'Dramatic side spotlighting with deep shadows' },
+  { id: '2', category: 'Lighting & Mood', text: 'Warm golden hour sunlight filtering through leaves' },
+  { id: '3', category: 'Lighting & Mood', text: 'Moody midnight lounge ambience with soft amber backlight' },
+  { id: '4', category: 'Close-up Details', text: 'Macro lens extreme detail showing crispy caramelized edges' },
+  { id: '5', category: 'Close-up Details', text: 'Shallow depth of field with ultra-creamy background bokeh' },
+  { id: '6', category: 'Food Action & Effects', text: 'Glowing melted cheese pull stretching upwards' },
+  { id: '7', category: 'Food Action & Effects', text: 'Delicate wisps of steam gently rising from the hot plate' },
+  { id: '8', category: 'Food Action & Effects', text: 'Rich glossy sauce dripping down the side of the dish' },
+  { id: '9', category: 'Props & Styling', text: 'Dark Carrara marble surface with scattered Maldon sea salt flakes' },
+  { id: '10', category: 'Props & Styling', text: 'Artisanal linen napkin with vintage brass cutlery and red wine glass' },
+];
 
 export const DishEditorModal: React.FC<DishEditorModalProps> = ({
   dish,
@@ -22,6 +42,73 @@ export const DishEditorModal: React.FC<DishEditorModalProps> = ({
   const [activeImage, setActiveImage] = useState<string>(dish.imageUrl || '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<PhotoHistoryItem[]>(dish.history || []);
+
+  // Prompt Library Drawer state
+  const [showLibrary, setShowLibrary] = useState<boolean>(false);
+  const [customSnippets, setCustomSnippets] = useState<PromptSnippet[]>([]);
+  const [newSnippetText, setNewSnippetText] = useState<string>('');
+  const [newSnippetCategory, setNewSnippetCategory] = useState<string>('Custom Snippets');
+  const [activeCategoryTab, setActiveCategoryTab] = useState<string>('All');
+
+  // Load custom snippets from localStorage
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('aperture_prompt_library');
+      if (stored) {
+        setCustomSnippets(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.error('Failed to load prompt library from localStorage', e);
+    }
+  }, []);
+
+  // Save custom snippet to library
+  const handleAddCustomSnippet = () => {
+    if (!newSnippetText.trim()) return;
+    const snippet: PromptSnippet = {
+      id: Date.now().toString(),
+      category: newSnippetCategory || 'Custom Snippets',
+      text: newSnippetText.trim(),
+      isCustom: true,
+    };
+    const updated = [snippet, ...customSnippets];
+    setCustomSnippets(updated);
+    setNewSnippetText('');
+    try {
+      localStorage.setItem('aperture_prompt_library', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to save prompt snippet', e);
+    }
+  };
+
+  // Remove custom snippet
+  const handleRemoveCustomSnippet = (id: string) => {
+    const updated = customSnippets.filter((s) => s.id !== id);
+    setCustomSnippets(updated);
+    try {
+      localStorage.setItem('aperture_prompt_library', JSON.stringify(updated));
+    } catch (e) {
+      console.error('Failed to delete prompt snippet', e);
+    }
+  };
+
+  // Insert snippet into edit prompt
+  const handleInsertSnippet = (snippetText: string) => {
+    setEditPrompt((prev) => {
+      if (!prev.trim()) return snippetText;
+      if (prev.trim().endsWith(',')) return `${prev.trim()} ${snippetText}`;
+      return `${prev.trim()}, ${snippetText}`;
+    });
+  };
+
+  const allSnippets = [...customSnippets, ...DEFAULT_SNIPPETS];
+  const categories = ['All', 'Saved Custom', ...Array.from(new Set(DEFAULT_SNIPPETS.map((s) => s.category)))];
+
+  const filteredSnippets = allSnippets.filter((s) => {
+    if (activeCategoryTab === 'All') return true;
+    if (activeCategoryTab === 'Saved Custom') return s.isCustom;
+    return s.category === activeCategoryTab;
+  });
 
   const retouchPresets = [
     'Add rising steam wisps above the dish',
@@ -210,9 +297,112 @@ export const DishEditorModal: React.FC<DishEditorModalProps> = ({
 
               {/* Custom Text Prompt Retouch */}
               <div className="space-y-2">
-                <label className="block text-xs font-semibold text-slate-300">
-                  Custom AI Retouch Instructions
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-semibold text-slate-300">
+                    Custom AI Retouch Instructions
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowLibrary(!showLibrary)}
+                    className="flex items-center gap-1.5 text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded-lg border border-amber-500/30 transition-all cursor-pointer"
+                  >
+                    <BookMarked className="w-3.5 h-3.5" />
+                    <span>Prompt Snippet Library ({allSnippets.length})</span>
+                    {showLibrary ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                  </button>
+                </div>
+
+                {/* PROMPT LIBRARY DRAWER PANEL */}
+                {showLibrary && (
+                  <div className="bg-slate-950 rounded-2xl border border-slate-800 p-4 space-y-3.5 animate-fade-in my-2">
+                    <div className="flex items-center justify-between border-b border-slate-900 pb-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-300 flex items-center gap-1.5 font-mono">
+                        <Tag className="w-3 h-3 text-amber-400" /> Reusable Food Photography Snippets
+                      </span>
+                      <span className="text-[10px] text-slate-500">Click snippet to insert</span>
+                    </div>
+
+                    {/* Category Tabs */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                      {categories.map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => setActiveCategoryTab(cat)}
+                          className={`text-[10px] font-semibold px-2.5 py-1 rounded-lg transition-all shrink-0 ${
+                            activeCategoryTab === cat
+                              ? 'bg-amber-500 text-slate-950 font-bold'
+                              : 'bg-slate-900 text-slate-400 hover:text-slate-200 border border-slate-800'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Snippet Items List */}
+                    <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1">
+                      {filteredSnippets.length === 0 ? (
+                        <p className="text-[11px] text-slate-500 italic py-2">No snippets found in this category.</p>
+                      ) : (
+                        filteredSnippets.map((snippet) => (
+                          <div
+                            key={snippet.id}
+                            className="flex items-center justify-between gap-2 p-2 rounded-xl bg-slate-900/80 hover:bg-slate-900 border border-slate-800/80 text-left transition-colors group"
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleInsertSnippet(snippet.text)}
+                              className="flex-1 text-left text-xs text-slate-300 group-hover:text-amber-300 flex items-center gap-2"
+                            >
+                              <Plus className="w-3 h-3 text-amber-400 shrink-0" />
+                              <span>{snippet.text}</span>
+                            </button>
+
+                            {snippet.isCustom && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCustomSnippet(snippet.id)}
+                                className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-red-950/40 transition-colors"
+                                title="Delete saved snippet"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    {/* Save New Snippet Input Form */}
+                    <div className="pt-2 border-t border-slate-900 flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={newSnippetText}
+                        onChange={(e) => setNewSnippetText(e.target.value)}
+                        placeholder="Save custom phrase (e.g. dramatic lighting)..."
+                        className="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomSnippet();
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomSnippet}
+                        disabled={!newSnippetText.trim()}
+                        className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center gap-1 disabled:opacity-50 cursor-pointer shrink-0"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Save</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <textarea
                   rows={3}
                   value={editPrompt}
