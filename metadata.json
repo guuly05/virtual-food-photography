@@ -1,0 +1,6 @@
+{
+  "name": "Virtual Food Photographer",
+  "description": "AI studio for restaurant owners to convert text menus into high-end food photography with custom aesthetic styles, resolutions, and AI retouching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
