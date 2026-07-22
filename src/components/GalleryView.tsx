@@ -11,7 +11,13 @@ interface GalleryViewProps {
 export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }) => {
   const [selectedStyle, setSelectedStyle] = useState<string>('all');
   const [isZipping, setIsZipping] = useState<boolean>(false);
-  const [zipProgress, setZipProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [zipProgress, setZipProgress] = useState<{
+    current: number;
+    total: number;
+    currentName: string;
+    percent: number;
+    phase: 'fetching' | 'compressing' | 'complete';
+  }>({ current: 0, total: 0, currentName: '', percent: 0, phase: 'fetching' });
 
   const generatedDishes = dishes.filter((d) => d.imageUrl);
 
@@ -34,7 +40,13 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }
     if (generatedDishes.length === 0 || isZipping) return;
 
     setIsZipping(true);
-    setZipProgress({ current: 0, total: generatedDishes.length });
+    setZipProgress({
+      current: 0,
+      total: generatedDishes.length,
+      currentName: 'Preparing images...',
+      percent: 0,
+      phase: 'fetching',
+    });
 
     try {
       const zip = new JSZip();
@@ -42,7 +54,15 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }
 
       for (let i = 0; i < generatedDishes.length; i++) {
         const dish = generatedDishes[i];
-        setZipProgress({ current: i + 1, total: generatedDishes.length });
+        const fetchPercent = Math.round(((i + 0.5) / generatedDishes.length) * 70);
+
+        setZipProgress({
+          current: i + 1,
+          total: generatedDishes.length,
+          currentName: dish.name,
+          percent: fetchPercent,
+          phase: 'fetching',
+        });
 
         if (!dish.imageUrl) continue;
 
@@ -61,7 +81,21 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }
         }
       }
 
-      const zipContent = await zip.generateAsync({ type: 'blob' });
+      setZipProgress((prev) => ({
+        ...prev,
+        phase: 'compressing',
+        currentName: 'Compressing high-resolution ZIP package...',
+        percent: 75,
+      }));
+
+      const zipContent = await zip.generateAsync({ type: 'blob' }, (metadata) => {
+        const totalPercent = Math.round(75 + (metadata.percent * 0.25));
+        setZipProgress((prev) => ({
+          ...prev,
+          percent: Math.min(totalPercent, 100),
+        }));
+      });
+
       const link = document.createElement('a');
       link.href = URL.createObjectURL(zipContent);
       link.download = `aperture_food_photography_gallery_${Date.now()}.zip`;
@@ -69,9 +103,19 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
+
+      setZipProgress((prev) => ({
+        ...prev,
+        phase: 'complete',
+        currentName: 'ZIP Download Started!',
+        percent: 100,
+      }));
+
+      setTimeout(() => {
+        setIsZipping(false);
+      }, 1500);
     } catch (err) {
       console.error('Error generating ZIP archive:', err);
-    } finally {
       setIsZipping(false);
     }
   };
@@ -101,7 +145,7 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }
             {isZipping ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Zipping ({zipProgress.current}/{zipProgress.total})...</span>
+                <span>Exporting ZIP ({zipProgress.percent}%)...</span>
               </>
             ) : (
               <>
@@ -112,6 +156,39 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }
           </button>
         )}
       </div>
+
+      {/* Real-time ZIP Progress Bar Card */}
+      {isZipping && (
+        <div className="bg-slate-900/90 rounded-2xl border border-amber-500/30 p-5 space-y-3 shadow-xl backdrop-blur animate-fade-in">
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <div className="flex items-center gap-2 text-white">
+              <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />
+              <span>
+                {zipProgress.phase === 'fetching'
+                  ? `Packaging Photo ${zipProgress.current} of ${zipProgress.total}: `
+                  : zipProgress.phase === 'compressing'
+                  ? 'Compressing Archive: '
+                  : 'Complete: '}
+                <strong className="text-amber-400">{zipProgress.currentName}</strong>
+              </span>
+            </div>
+            <span className="text-amber-400 font-mono font-bold">{zipProgress.percent}%</span>
+          </div>
+
+          {/* Visual Progress Bar */}
+          <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800 p-0.5">
+            <div
+              className="bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 h-full rounded-full transition-all duration-300 shadow-sm"
+              style={{ width: `${zipProgress.percent}%` }}
+            />
+          </div>
+
+          <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono">
+            <span>High-Res PNG Assets • Uncompressed Studio Quality</span>
+            <span>{zipProgress.current} / {zipProgress.total} Items Processed</span>
+          </div>
+        </div>
+      )}
 
       {/* Style Filters */}
       <div className="flex flex-wrap items-center gap-2 bg-slate-950 p-2 rounded-2xl border border-slate-800">
