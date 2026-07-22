@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Dish, StudioSettings, PhotoHistoryItem } from '../types';
-import { X, Wand2, Download, Sparkles, Loader2, History, Check, ArrowRight, RefreshCw, ZoomIn, SlidersHorizontal, BookMarked, Plus, Trash2, Tag, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Wand2, Download, Sparkles, Loader2, History, Check, ArrowRight, RefreshCw, ZoomIn, SlidersHorizontal, BookMarked, Plus, Trash2, Tag, ChevronDown, ChevronUp, Columns2, Eye } from 'lucide-react';
 
 interface DishEditorModalProps {
   dish: Dish | null;
@@ -42,6 +42,10 @@ export const DishEditorModal: React.FC<DishEditorModalProps> = ({
   const [activeImage, setActiveImage] = useState<string>(dish.imageUrl || '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [historyItems, setHistoryItems] = useState<PhotoHistoryItem[]>(dish.history || []);
+
+  // Comparison State
+  const [isComparing, setIsComparing] = useState<boolean>(false);
+  const [compareImage, setCompareImage] = useState<string | null>(null);
 
   // Prompt Library Drawer state
   const [showLibrary, setShowLibrary] = useState<boolean>(false);
@@ -178,6 +182,21 @@ export const DishEditorModal: React.FC<DishEditorModalProps> = ({
     document.body.removeChild(link);
   };
 
+  const handleToggleCompare = () => {
+    if (!isComparing) {
+      const prevImage = historyItems.find((item) => item.imageUrl !== activeImage)?.imageUrl || historyItems[1]?.imageUrl || activeImage;
+      setCompareImage(prevImage);
+      setIsComparing(true);
+    } else {
+      setIsComparing(false);
+    }
+  };
+
+  const handleSelectActiveFromCompare = (selectedUrl: string) => {
+    setActiveImage(selectedUrl);
+    onUpdateDishPhoto(dish.id, selectedUrl, 'Selected from comparison');
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
       <div className="bg-slate-900 rounded-3xl border border-slate-800 max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
@@ -197,6 +216,21 @@ export const DishEditorModal: React.FC<DishEditorModalProps> = ({
           </div>
 
           <div className="flex items-center gap-3">
+            {historyItems.length > 1 && (
+              <button
+                type="button"
+                onClick={handleToggleCompare}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                  isComparing
+                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow'
+                    : 'bg-slate-800 hover:bg-slate-700 text-amber-400 border-slate-700'
+                }`}
+              >
+                <Columns2 className="w-3.5 h-3.5" />
+                <span>{isComparing ? 'Close Compare' : 'Side-by-Side Compare'}</span>
+              </button>
+            )}
+
             <button
               onClick={handleDownloadActive}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 transition-colors"
@@ -216,10 +250,10 @@ export const DishEditorModal: React.FC<DishEditorModalProps> = ({
         {/* Modal Main Body */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-y-auto">
           
-          {/* Left Column: Image Canvas Lightbox */}
-          <div className="lg:col-span-7 bg-slate-950 p-6 flex flex-col items-center justify-center relative border-b lg:border-b-0 lg:border-r border-slate-800 min-h-[360px]">
+          {/* Left Column: Image Canvas Lightbox / Comparison */}
+          <div className="lg:col-span-7 bg-slate-950 p-6 flex flex-col items-center justify-between relative border-b lg:border-b-0 lg:border-r border-slate-800 min-h-[360px]">
             {isRetouching ? (
-              <div className="flex flex-col items-center space-y-3 p-8 text-center">
+              <div className="flex flex-col items-center justify-center my-auto space-y-3 p-8 text-center">
                 <div className="relative">
                   <div className="w-16 h-16 rounded-full border-2 border-amber-500/30 border-t-amber-400 animate-spin" />
                   <Wand2 className="w-6 h-6 text-amber-400 absolute inset-0 m-auto" />
@@ -229,8 +263,86 @@ export const DishEditorModal: React.FC<DishEditorModalProps> = ({
                   Gemini 3.1 Flash Vision model is updating food textures, lighting, and requested garnishes.
                 </p>
               </div>
+            ) : isComparing ? (
+              /* SIDE BY SIDE COMPARISON VIEW */
+              <div className="w-full h-full flex flex-col justify-between space-y-4">
+                <div className="flex items-center justify-between text-xs text-slate-400 border-b border-slate-900 pb-2">
+                  <span className="font-bold text-amber-400 font-mono uppercase flex items-center gap-1.5">
+                    <Columns2 className="w-4 h-4 text-amber-400" /> Side-by-Side Shot Comparison
+                  </span>
+                  <span className="text-[11px] text-slate-500">Click "Set Active" to pick winning photo</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 flex-1 items-center">
+                  {/* Left: Baseline / Version A */}
+                  <div className="bg-slate-900/60 p-3 rounded-2xl border border-slate-800 flex flex-col items-center space-y-2">
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                        Version A (Baseline)
+                      </span>
+                      {compareImage !== activeImage && (
+                        <button
+                          type="button"
+                          onClick={() => handleSelectActiveFromCompare(compareImage || activeImage)}
+                          className="text-[10px] font-bold text-slate-300 hover:text-amber-400 bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded border border-slate-700 transition-colors"
+                        >
+                          Set Active
+                        </button>
+                      )}
+                    </div>
+                    <div className="relative aspect-square w-full bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center">
+                      <img
+                        src={compareImage || activeImage}
+                        alt="Version A"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Right: Active / Version B */}
+                  <div className="bg-slate-900/60 p-3 rounded-2xl border border-amber-500/30 flex flex-col items-center space-y-2 shadow-lg">
+                    <div className="flex items-center justify-between w-full">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        Version B (Current Active)
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-400 flex items-center gap-1">
+                        <Check className="w-3 h-3" /> Selected
+                      </span>
+                    </div>
+                    <div className="relative aspect-square w-full bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-amber-500/30">
+                      <img
+                        src={activeImage}
+                        alt="Version B"
+                        className="w-full h-full object-cover"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 text-center">
+                  Select baseline to compare against:
+                  <div className="flex items-center justify-center gap-2 mt-1.5 overflow-x-auto pb-1">
+                    {historyItems.map((item, idx) => (
+                      <button
+                        key={item.id || idx}
+                        type="button"
+                        onClick={() => setCompareImage(item.imageUrl)}
+                        className={`text-[10px] px-2.5 py-1 rounded-lg border transition-all ${
+                          compareImage === item.imageUrl
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
+                            : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-white'
+                        }`}
+                      >
+                        Shot #{historyItems.length - idx}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             ) : activeImage ? (
-              <div className="relative w-full h-full flex items-center justify-center group">
+              <div className="relative w-full h-full flex items-center justify-center group my-auto">
                 <img
                   src={activeImage}
                   alt={dish.name}
@@ -243,7 +355,7 @@ export const DishEditorModal: React.FC<DishEditorModalProps> = ({
             )}
 
             {/* History Thumbnails */}
-            {historyItems.length > 0 && (
+            {historyItems.length > 0 && !isComparing && (
               <div className="w-full mt-4 pt-3 border-t border-slate-900 flex items-center gap-2 overflow-x-auto pb-1">
                 <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1 shrink-0">
                   <History className="w-3 h-3 text-amber-400" /> History:
