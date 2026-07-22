@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Dish, StylePreset } from '../types';
-import { Download, Camera, Filter, Sparkles, Maximize2, Tag, Layers } from 'lucide-react';
+import { Download, Camera, Filter, Sparkles, Maximize2, Tag, Layers, Loader2, Archive } from 'lucide-react';
+import JSZip from 'jszip';
 
 interface GalleryViewProps {
   dishes: Dish[];
@@ -9,6 +10,8 @@ interface GalleryViewProps {
 
 export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }) => {
   const [selectedStyle, setSelectedStyle] = useState<string>('all');
+  const [isZipping, setIsZipping] = useState<boolean>(false);
+  const [zipProgress, setZipProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
 
   const generatedDishes = dishes.filter((d) => d.imageUrl);
 
@@ -27,12 +30,50 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }
     document.body.removeChild(link);
   };
 
-  const handleDownloadAll = () => {
-    generatedDishes.forEach((dish, idx) => {
-      setTimeout(() => {
-        handleDownloadSingle(dish);
-      }, idx * 300);
-    });
+  const handleDownloadAllZip = async () => {
+    if (generatedDishes.length === 0 || isZipping) return;
+
+    setIsZipping(true);
+    setZipProgress({ current: 0, total: generatedDishes.length });
+
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder('food_photography_gallery');
+
+      for (let i = 0; i < generatedDishes.length; i++) {
+        const dish = generatedDishes[i];
+        setZipProgress({ current: i + 1, total: generatedDishes.length });
+
+        if (!dish.imageUrl) continue;
+
+        const sanitizedName = dish.name.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        const fileName = `${sanitizedName}_${dish.generatedStyle || 'photo'}.png`;
+
+        if (dish.imageUrl.startsWith('data:')) {
+          // Base64 data URL
+          const base64Data = dish.imageUrl.split(',')[1];
+          folder?.file(fileName, base64Data, { base64: true });
+        } else {
+          // Regular URL
+          const response = await fetch(dish.imageUrl);
+          const blob = await response.blob();
+          folder?.file(fileName, blob);
+        }
+      }
+
+      const zipContent = await zip.generateAsync({ type: 'blob' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(zipContent);
+      link.download = `aperture_food_photography_gallery_${Date.now()}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    } catch (err) {
+      console.error('Error generating ZIP archive:', err);
+    } finally {
+      setIsZipping(false);
+    }
   };
 
   return (
@@ -53,11 +94,21 @@ export const GalleryView: React.FC<GalleryViewProps> = ({ dishes, onOpenEditor }
         {generatedDishes.length > 0 && (
           <button
             type="button"
-            onClick={handleDownloadAll}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer self-start sm:self-auto"
+            onClick={handleDownloadAllZip}
+            disabled={isZipping}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/20 transition-all cursor-pointer disabled:opacity-50 self-start sm:self-auto"
           >
-            <Download className="w-4 h-4" />
-            <span>Download All ({generatedDishes.length}) Photos</span>
+            {isZipping ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Zipping ({zipProgress.current}/{zipProgress.total})...</span>
+              </>
+            ) : (
+              <>
+                <Archive className="w-4 h-4" />
+                <span>Download All as ZIP Archive ({generatedDishes.length})</span>
+              </>
+            )}
           </button>
         )}
       </div>
